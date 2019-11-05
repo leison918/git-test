@@ -1,0 +1,63 @@
+From f4f2d2aa722696c2eb58d4fa9f8e96b401a6e35a Mon Sep 17 00:00:00 2001
+From: libin <bin.li@rock-chips.com>
+Date: Wed, 15 May 2019 19:19:22 +0800
+Subject: [PATCH 2/2] AFBC : HWC will disable AFBC encoding,if the display
+ device width and height is non-compliant.
+
+Change-Id: I18fdd2d3584e4e3b5a5355f9205b6112616252ca
+Signed-off-by: libin <bin.li@rock-chips.com>
+---
+ drmresources.cpp |  6 +-----
+ hwcomposer.cpp   | 19 +++++++++++++++++++
+ 2 files changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/drmresources.cpp b/drmresources.cpp
+index 80a0eef..f3f8389 100755
+--- a/drmresources.cpp
++++ b/drmresources.cpp
+@@ -903,11 +903,7 @@ int DrmResources::UpdateDisplayRoute(void)
+   if(primary && primary->encoder() && primary->encoder()->crtc())
+   {
+     DrmCrtc *crtc = primary->encoder()->crtc();
+-    if(crtc->get_afbc()){
+-      property_set( PROPERTY_TYPE ".gralloc.disable_afbc", "0");
+-      ALOGD_IF(log_level(DBG_VERBOSE), "%s:line=%d primary conn[%d] crtc=%d support AFBC(%d), to use AFBC\n",
+-               __FUNCTION__, __LINE__, primary->id(), crtc->id(),crtc->get_afbc());
+-    }else{
++    if(!crtc->get_afbc()){
+       property_set( PROPERTY_TYPE ".gralloc.disable_afbc", "1");
+       ALOGD_IF(log_level(DBG_VERBOSE), "%s:line=%d primary conn[%d] crtc=%d support AFBC(%d), to disable AFBC\n",
+                __FUNCTION__, __LINE__, primary->id(), crtc->id(),crtc->get_afbc());
+diff --git a/hwcomposer.cpp b/hwcomposer.cpp
+index 38af542..dad04ae 100755
+--- a/hwcomposer.cpp
++++ b/hwcomposer.cpp
+@@ -3899,6 +3899,25 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
+   hd->rel_yres = mode.v_display();
+   hd->v_total = mode.v_total();
+ 
++  // AFBDC limit
++  bool disable_afbdc = false;
++  if(display == HWC_DISPLAY_PRIMARY){
++#ifdef TARGET_BOARD_PLATFORM_RK3399
++    if(hd->framebuffer_width > 2560 || hd->framebuffer_width % 16 != 0 || hd->framebuffer_height % 8 != 0)
++       disable_afbdc = true;
++#elif TARGET_BOARD_PLATFORM_RK3368
++    if(hd->framebuffer_width > 2048 || hd->framebuffer_width % 16 != 0 || hd->framebuffer_height % 4 != 0)
++       disable_afbdc = true;
++#elif TARGET_BOARD_PLATFORM_RK3326
++    if(hd->framebuffer_width > 1920 || hd->framebuffer_width % 16 != 0 || hd->framebuffer_height % 8 != 0)
++       disable_afbdc = true;
++#endif
++    if(disable_afbdc){
++      property_set( PROPERTY_TYPE ".gralloc.disable_afbc", "1");
++      ALOGI("%s:line=%d primary framebuffer size %dx%d not support AFBDC, to disable AFBDC\n",
++               __FUNCTION__, __LINE__, hd->framebuffer_width,hd->framebuffer_height);
++    }
++  }
+   *num_configs = 1;
+   configs[0] = connector->display();
+ 
+-- 
+2.7.4
+
